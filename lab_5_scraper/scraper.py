@@ -26,6 +26,9 @@ class Config:
         Args:
             path_to_config (pathlib.Path): Path to configuration.
         """
+        self.path_to_config = path_to_config
+        self.config_data = self._load_config()
+        self.dto = self._create_dto()
 
     def _extract_config_content(self) -> ConfigDTO:
         """
@@ -34,12 +37,33 @@ class Config:
         Returns:
             ConfigDTO: Config values
         """
-        
+        with open(self.path_to_config, 'r', encoding='utf-8') as file:
+            config_data = json.load(file)
+
+        config_dto = ConfigDTO(
+            seed_urls=config_data.get('seed_urls', []),
+            headers=config_data.get('headers', {}),
+            timeout=config_data.get('timeout', 5),
+            retries=config_data.get('retries', 3),
+            delay=config_data.get('delay', 1)
+        )
+
+        return config_dto
+
 
     def _validate_config_content(self) -> None:
         """
         Ensure configuration parameters are not corrupt.
         """
+        config_dto = self._extract_config_content()
+
+        self._validate_seed_urls(config_dto.seed_urls)
+        self._validate_articles_count(config_dto.total_articles_to_parse)
+        self._validate_headers(config_dto.headers)
+        self._validate_encoding(config_dto.encoding)
+        self._validate_timeout(config_dto.timeout)
+        self._validate_verify(config_dto.verify)
+        self._validate_headless(config_dto.headless)
 
     def get_seed_urls(self) -> list[str]:
         """

@@ -71,12 +71,12 @@ class Config:
         self._validate_config_content()
 
         self._seed_urls = self.dto.seed_urls
-        self._num_articles = self.dto.total_articles_to_find_and_parse
+        self._num_articles = self.dto.total_articles
         self._headers = self.dto.headers
         self._encoding = self.dto.encoding
         self._timeout = self.dto.timeout
         self._should_verify_certificate = self.dto.should_verify_certificate
-        self._headless_mode = self.dto.headless
+        self._headless_mode = self.dto.headless_mode
 
     def _extract_config_content(self) -> ConfigDTO:
         """
@@ -88,17 +88,15 @@ class Config:
         with open(self.path_to_config, 'r', encoding='utf-8') as file:
             config_data = json.load(file)
             
-        config_dto = ConfigDTO(
+        return ConfigDTO(
             seed_urls=config_data.get('seed_urls', []),
             headers=config_data.get('headers', {}),
             timeout=config_data.get('timeout', 5),
             total_articles_to_find_and_parse=config_data.get('total_articles_to_find_and_parse', 10),
             encoding=config_data.get('encoding', 'utf-8'),
             should_verify_certificate=config_data.get('should_verify_certificate', True),
-            headless=config_data.get('headless_mode', False)
-    )
-
-        return config_dto
+            headless_mode=config_data.get('headless_mode', False)
+        )
 
 
     def _validate_config_content(self) -> None:
@@ -106,12 +104,12 @@ class Config:
         Ensure configuration parameters are not corrupt.
         """
         self._validate_seed_urls(self.dto.seed_urls)
-        self._validate_articles_count(self.dto.total_articles_to_find_and_parse)
+        self._validate_articles_count(self.dto.total_articles)
         self._validate_headers(self.dto.headers)
         self._validate_encoding(self.dto.encoding)
         self._validate_timeout(self.dto.timeout)
         self._validate_verify(self.dto.should_verify_certificate)
-        self._validate_headless(self.dto.headless)
+        self._validate_headless(self.dto.headless_mode)
 
     def _validate_seed_urls(self, seed_urls: list) -> None:
         """Validate seed URLs pattern."""
@@ -227,7 +225,7 @@ class Config:
         Returns:
             bool: Whether to use headless mode or not
         """
-        return self.dto.headless
+        return self._headless_mode
 
 
 def make_request(url: str, config: Config) -> requests.models.Response:

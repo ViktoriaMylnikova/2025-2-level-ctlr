@@ -13,7 +13,7 @@ import requests
 from bs4 import BeautifulSoup, Tag
 
 from core_utils.article.article import Article
-from core_utils.article.io import to_raw
+from core_utils.article.io import to_raw, to_meta
 from core_utils.config_dto import ConfigDTO
 from core_utils.constants import ASSETS_PATH, CRAWLER_CONFIG_PATH
 
@@ -285,11 +285,37 @@ class Crawler:
         Returns:
             str: Url from HTML
         """
+        for link in article_bs.find_all('a', href=True):
+            href = link.get('href', '')
+            if '/vstrechi/' in href:
+                if href.startswith('http'):
+                    return href
+                return urljoin('https://event.pishi.pro', href)
+        return None
 
     def find_articles(self) -> None:
         """
         Find articles.
         """
+        needed = self.config.get_num_articles()
+        collected = []
+
+        for seed in self.config.get_seed_urls():
+            if len(collected) >= needed:
+                break
+
+            response = make_request(seed, self.config)
+            if response is None or response.status_code != 200:
+                continue
+
+            soup = BeautifulSoup(response.text, 'html.parser')
+            article_url = self._extract_url(soup)
+
+            if article_url and article_url not in collected:
+                collected.append(article_url)
+                self._urls.append(article_url)
+
+        self._urls = collected[:needed]
 
     def get_search_urls(self) -> list:
         """
@@ -298,6 +324,7 @@ class Crawler:
         Returns:
             list: seed_urls param
         """
+        return self._urls
 
 
 # 10
@@ -341,6 +368,10 @@ class HTMLParser:
             article_id (int): Article id
             config (Config): Configuration
         """
+        self.full_url = full_url
+        self.article_id = article_id
+        self.config = config
+        self.article = Article(url=full_url, article_id=article_id)
 
     def _fill_article_with_text(self, article_soup: BeautifulSoup) -> None:
         """
@@ -349,6 +380,18 @@ class HTMLParser:
         Args:
             article_soup (bs4.BeautifulSoup): BeautifulSoup instance
         """
+        text_parts = []
+        for paragraph in article_soup.find_all(['p', 'div.article-text', 'div.content']):
+            raw_text = paragraph.get_text(strip=True)
+            if raw_text and len(raw_text) > 50:
+                text_parts.append(raw_text)
+        
+        if not text_parts:
+            body = article_soup.find('body')
+            if body:
+                text_parts.append(body.get_text(strip=True))
+        
+        self.article.text = '\n\n'.join(text_parts)
 
     def _fill_article_with_meta_information(self, article_soup: BeautifulSoup) -> None:
         """
@@ -357,6 +400,17 @@ class HTMLParser:
         Args:
             article_soup (bs4.BeautifulSoup): BeautifulSoup instance
         """
+        title_tag = article_soup.find('h1')
+        if title_tag:
+            self.article.title = title_tag.get_text(strip=True)
+        else:
+            self.article.title = "NOT FOUND"
+
+        author_tag = article_soup.find(class_=re.compile(r'author', re.I))
+        if author_tag:
+            self.article.author = [author_tag.get_text(strip=True)]
+        else:
+            self.article.author = ["NOT FOUND"]
 
     def unify_date_format(self, date_str: str) -> datetime.datetime:
         """
@@ -368,6 +422,7 @@ class HTMLParser:
         Returns:
             datetime.datetime: Datetime object
         """
+        return datetime.datetime.now()
 
     def parse(self) -> Article | bool:
         """
@@ -376,6 +431,15 @@ class HTMLParser:
         Returns:
             Article | bool: Article instance, False in case of request error
         """
+        response = make_request(self.full_url, self.config)
+        if response is None or response.status_code != 200:
+            return False
+
+        soup = BeautifulSoup(response.text, 'html.parser')
+        self._fill_article_with_text(soup)
+        self._fill_article_with_meta_information(soup)
+
+        return self.article
 
 
 def prepare_environment(base_path: pathlib.Path | str) -> None:
@@ -385,12 +449,28 @@ def prepare_environment(base_path: pathlib.Path | str) -> None:
     Args:
         base_path (pathlib.Path | str): Path where articles stores
     """
+    import shutil
+    path = pathlib.Path(base_path)
+    if path.exists():
+        shutil.rmtree(path)
+    path.mkdir(parents=True, exist_ok=True)
 
 
 def main() -> None:
     """
     Entrypoint for scraper module.
     """
+    prepare_environment(ASSETS_PATH)
+    config = Config(CRAWLER_CONFIG_PATH)
+    crawler = Crawler(config)
+    crawler.find_articles()
+
+    for idx, url in enumerate(crawler.get_search_urls(), start=1):
+        parser = HTMLParser(full_url=url, article_id=idx, config=config)
+        article = parser.parse()
+        if article and article.text:
+            to_raw(article, ASSETS_PATH)
+            to_meta(article, ASSETS_PATH)
 
 
 if __name__ == "__main__":

@@ -275,7 +275,7 @@ class Crawler:
             config (Config): Configuration
         """
         self.config = config
-        self._urls: list[str] = []
+        self.urls: list[str] = []
 
     def _extract_url(self, article_bs: Tag) -> str:
         """
@@ -315,9 +315,9 @@ class Crawler:
 
             if article_url and article_url not in collected:
                 collected.append(article_url)
-                self._urls.append(article_url)
+                self.urls.append(article_url)
 
-        self._urls = collected[:needed]
+        self.urls = collected[:needed]
 
     def get_search_urls(self) -> list:
         """
@@ -326,7 +326,7 @@ class Crawler:
         Returns:
             list: seed_urls param
         """
-        return self._urls
+        return self.config.get_seed_urls()
 
 
 # 10

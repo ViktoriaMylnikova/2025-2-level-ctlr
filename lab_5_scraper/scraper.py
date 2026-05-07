@@ -123,7 +123,7 @@ class Config:
 
     def _validate_articles_count(self, count: int) -> None:
         """Validate total number of articles."""
-        if not isinstance(count, int):
+        if type(count) is not int:
             raise IncorrectNumberOfArticlesError(
                 f"Number of articles must be an integer, got: {type(count).__name__}"
             )

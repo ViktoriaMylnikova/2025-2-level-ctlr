@@ -3,9 +3,13 @@ Crawler implementation.
 """
 
 # pylint: disable=too-many-arguments, too-many-instance-attributes, unused-import, undefined-variable, unused-argument
+import sys
+import pathlib
+
+sys.path.insert(0, str(pathlib.Path(__file__).parent.parent))
+
 import datetime
 import json
-import pathlib
 import re
 from urllib.parse import urljoin
 
@@ -287,27 +291,22 @@ class Crawler:
         Returns:
             str: Url from HTML
         """
-        article_urls = []
-        for link in article_bs.find_all('a', href=True):
-            href = link.get('href', '')
-            if '/vstrechi/' in href:
-                if href.startswith('http'):
-                    full_url = href
-                else:
-                    full_url = urljoin('https://event.pishi.pro', href)
-                article_urls.append(full_url)
-        return article_urls
+        href = article_bs.get('href', '')
+        if not href:
+            return ''
+
+        if href.startswith('http'):
+            return href
+        return urljoin('https://event.pishi.pro', href)
 
     def find_articles(self) -> None:
         """
         Find articles.
         """
         needed = self.config.get_num_articles()
-        collected = []
-        seen = set()
 
         for seed in self.config.get_seed_urls():
-            if len(collected) >= needed:
+            if len(self.urls) >= needed:
                 break
 
             response = make_request(seed, self.config)
@@ -315,18 +314,16 @@ class Crawler:
                 continue
 
             soup = BeautifulSoup(response.text, 'html.parser')
-            article_urls = self._extract_url(soup)
 
-            for url in article_urls:
-                if url not in seen:
-                    seen.add(url)
-                    collected.append(url)
-                    self.urls.append(url)
-                    
-                if len(collected) >= needed:
+            for link in soup.find_all('a', href=True):
+                if len(self.urls) >= needed:
                     break
 
-        self.urls = collected[:needed]
+                href = link.get('href', '')
+                if '/vstrechi/' in href:
+                    full_url = self._extract_url(link)
+                    if full_url and full_url not in self.urls:
+                        self.urls.append(full_url)
 
 
     def get_search_urls(self) -> list:

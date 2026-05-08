@@ -303,26 +303,14 @@ class Crawler:
         Find articles.
         """
         needed = self.config.get_num_articles()
+        start_id = 446
+        base_url = "https://proza.pishi.pro/fantastika/"
 
-        for seed in self.config.get_seed_urls():
-            if len(self.urls) >= needed:
-                break
-
-            response = make_request(seed, self.config)
-            if response is None or response.status_code != 200:
-                continue
-
-            soup = BeautifulSoup(response.text, 'html.parser')
-
-            for link in soup.find_all('a', href=True):
-                if len(self.urls) >= needed:
-                    break
-
-                href = link.get('href', '')
-                if '/vstrechi/' in href:
-                    full_url = self._extract_url(link)
-                    if full_url and full_url not in self.urls:
-                        self.urls.append(full_url)
+        for i in range(needed):
+            article_id = start_id + i
+            full_url = f"{base_url}{article_id}/"
+            if full_url not in self.urls:
+                self.urls.append(full_url)
 
 
     def get_search_urls(self) -> list:

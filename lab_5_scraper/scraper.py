@@ -275,7 +275,7 @@ class Crawler:
             config (Config): Configuration
         """
         self.config = config
-        self.urls: list[str] = []
+        self.urls = []
 
     def _extract_url(self, article_bs: Tag) -> str:
         """
@@ -287,13 +287,16 @@ class Crawler:
         Returns:
             str: Url from HTML
         """
+        article_urls = []
         for link in article_bs.find_all('a', href=True):
             href = link.get('href', '')
             if '/vstrechi/' in href:
                 if href.startswith('http'):
-                    return href
-                return urljoin('https://event.pishi.pro', href)
-        return None
+                    full_url = href
+                else:
+                    full_url = urljoin('https://event.pishi.pro', href)
+                article_urls.append(full_url)
+        return article_urls
 
     def find_articles(self) -> None:
         """
@@ -301,6 +304,7 @@ class Crawler:
         """
         needed = self.config.get_num_articles()
         collected = []
+        seen = set()
 
         for seed in self.config.get_seed_urls():
             if len(collected) >= needed:
@@ -311,13 +315,19 @@ class Crawler:
                 continue
 
             soup = BeautifulSoup(response.text, 'html.parser')
-            article_url = self._extract_url(soup)
+            article_urls = self._extract_url(soup)
 
-            if article_url and article_url not in collected:
-                collected.append(article_url)
-                self.urls.append(article_url)
+            for url in article_urls:
+                if url not in seen:
+                    seen.add(url)
+                    collected.append(url)
+                    self.urls.append(url)
+                    
+                if len(collected) >= needed:
+                    break
 
         self.urls = collected[:needed]
+
 
     def get_search_urls(self) -> list:
         """

@@ -3,11 +3,14 @@ Crawler implementation.
 """
 
 # pylint: disable=too-many-arguments, too-many-instance-attributes, unused-import, undefined-variable, unused-argument
+import sys
+import pathlib
+
+sys.path.insert(0, str(pathlib.Path(__file__).parent.parent))
+
 import datetime
 import json
-import pathlib
 import re
-import sys
 from urllib.parse import urljoin
 
 import requests
@@ -17,8 +20,6 @@ from core_utils.article.article import Article
 from core_utils.article.io import to_meta, to_raw
 from core_utils.config_dto import ConfigDTO
 from core_utils.constants import ASSETS_PATH, CRAWLER_CONFIG_PATH
-
-sys.path.insert(0, str(pathlib.Path(__file__).parent.parent))
 
 
 class IncorrectSeedURLError(Exception):
@@ -463,8 +464,8 @@ def main() -> None:
         parser = HTMLParser(full_url=url, article_id=idx, config=config)
         article = parser.parse()
         if article and article.text:
-            to_raw(article, ASSETS_PATH)
-            to_meta(article, ASSETS_PATH)
+            to_raw(article)
+            to_meta(article)
 
 
 if __name__ == "__main__":

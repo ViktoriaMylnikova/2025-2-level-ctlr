@@ -2,15 +2,10 @@
 Crawler implementation.
 """
 
-import pathlib
-
 # pylint: disable=too-many-arguments, too-many-instance-attributes, unused-import, undefined-variable, unused-argument
-#import sys
-
-#sys.path.insert(0, str(pathlib.Path(__file__).parent.parent))
-
 import datetime
 import json
+import pathlib
 import re
 from urllib.parse import urljoin
 

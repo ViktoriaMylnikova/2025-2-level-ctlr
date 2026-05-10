@@ -456,10 +456,11 @@ def main() -> None:
     """
     Entrypoint for scraper module.
     """
-    prepare_environment(ASSETS_PATH)
     config = Config(CRAWLER_CONFIG_PATH)
+    prepare_environment(ASSETS_PATH)
     crawler = Crawler(config)
     crawler.find_articles()
+    print(f"Articles that were founded: {len(crawler.urls)}")
 
     for idx, url in enumerate(crawler.get_search_urls(), start=1):
         parser = HTMLParser(full_url=url, article_id=idx, config=config)
@@ -467,6 +468,7 @@ def main() -> None:
         if article and article.text:
             to_raw(article)
             to_meta(article)
+            print(f"Article {idx} saved: {url}")
 
 
 if __name__ == "__main__":

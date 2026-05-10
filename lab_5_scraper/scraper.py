@@ -298,7 +298,7 @@ class Crawler:
 
         if href.startswith('http'):
             return href
-        return urljoin('https://event.pishi.pro', href)
+        return urljoin('https://proza.pishi.pro', href)
 
     def find_articles(self) -> None:
         """

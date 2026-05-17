@@ -4,6 +4,7 @@ Crawler implementation.
 
 # pylint: disable=too-many-arguments, too-many-instance-attributes, unused-import, undefined-variable, unused-argument
 import datetime
+import html
 import json
 import pathlib
 import re
@@ -129,7 +130,7 @@ class Config:
         """Validate total number of articles."""
         if isinstance(count, bool):
             raise IncorrectNumberOfArticlesError(
-                f"Number of articles must be an integer, got: bool"
+                "Number of articles must be an integer, got: bool"
             )
 
         if not isinstance(count, int):
@@ -457,7 +458,7 @@ class HTMLParser:
         Extract article title.
         """
         title = None
-        
+
         h1_tag = article_soup.find('h1')
         if h1_tag:
             title = str(h1_tag.get_text(strip=True))
@@ -476,6 +477,9 @@ class HTMLParser:
                 if content:
                     title = str(content)
                     title = re.sub(r'\s*[-|].*$', '', title).strip()
+
+        if title:
+            title = html.unescape(title)
 
         if not title:
             title = "Без заголовка"

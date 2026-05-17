@@ -251,7 +251,7 @@ def make_request(url: str, config: Config) -> requests.models.Response:
             timeout=config.get_timeout(),
             verify=config.get_verify_certificate()
         )
-    except requests.RequestException as e:
+    except requests.RequestException:
         return None
 
     response.encoding = config.get_encoding()
@@ -264,7 +264,7 @@ class Crawler:
     """
 
     #: Url pattern
-    url_pattern: re.Pattern | str
+    url_pattern: re.Pattern | str = re.compile(r'fantastika/\d+')
 
     def __init__(self, config: Config) -> None:
         """
@@ -287,14 +287,15 @@ class Crawler:
             str: Url from HTML
         """
         href = article_bs.get('href', '')
-        
         if not isinstance(href, str):
             return ""
 
-        if '/fantastika/' in href:
+        if 'fantastika/' in href and re.search(r'fantastika/\d+', href):
+            href = href.split('#')[0]
+
             if href.startswith('http'):
                 return href
-            
+
             elif href.startswith('/'):
                 return f"https://proza.pishi.pro{href}"
 
@@ -314,10 +315,7 @@ class Crawler:
                 break
 
             response = make_request(seed_url, self.config)
-            if not response:
-                continue
-
-            if response.status_code != 200:
+            if not response or response.status_code != 200:
                 continue
 
             soup = BeautifulSoup(response.content, 'html.parser')
@@ -326,10 +324,10 @@ class Crawler:
             for link in all_links:
                 if len(self.urls) >= needed:
                     break
-
                 article_url = self._extract_url(link)
                 if article_url and article_url not in self.urls:
                     self.urls.append(article_url)
+
 
     def get_search_urls(self) -> list:
         """
@@ -398,17 +396,21 @@ class HTMLParser:
         """
         text_blocks = []
 
-        content_div = article_soup.find('div', class_='composition_text')
+        content_div = article_soup.find('div', class_='user-text-blk article')
+        if not content_div:
+            content_div = article_soup.find('div', id='string_count')
+
         if content_div:
             text = content_div.get_text(separator='\n', strip=True)
             lines = text.split('\n')
+
             for line in lines:
                 line = line.strip()
-                if len(line) > 20:
+                if len(line) > 30:
                     text_blocks.append(line)
 
         if not text_blocks:
-            content_div = article_soup.find('td', class_='win offset')
+            content_div = article_soup.find('div', class_='composition_text')
             if content_div:
                 text = content_div.get_text(separator='\n', strip=True)
                 lines = text.split('\n')
@@ -416,9 +418,16 @@ class HTMLParser:
                     line = line.strip()
                     if len(line) > 20 and not line.startswith('Тип:') and not line.startswith('Раздел:'):
                         text_blocks.append(line)
-        
+
+        if not text_blocks:
+            for p in article_soup.find_all('p'):
+                p_text = p.get_text(strip=True)
+                if len(p_text) > 30:
+                    text_blocks.append(p_text)
+                    
         self.article.text = '\n\n'.join(text_blocks)
         print(f"Article {self.article_id}: extracted {len(self.article.text)} characters")
+
 
     def _fill_article_with_meta_information(self, article_soup: BeautifulSoup) -> None:
         """
@@ -427,54 +436,80 @@ class HTMLParser:
         Args:
             article_soup (bs4.BeautifulSoup): BeautifulSoup instance
         """
+        title = None
+
         title_tag = article_soup.find('h1')
-        if not title_tag:
-            title_tag = article_soup.find('h2')
         if title_tag:
-            self.article.title = title_tag.get_text(strip=True)
-        else:
-            self.article.title = "Без заголовка"
+            title = title_tag.get_text(strip=True)
+            title = re.sub(r'\s*\([^)]*\)\s*$', '', title).strip()
+        
+        if not title:
+            title_tag = article_soup.find('title')
+            if title_tag:
+                title = title_tag.get_text(strip=True)
+                title = re.sub(r'\s*[-|].*$', '', title).strip()
 
-        author_tag = article_soup.find('div', class_='author') or article_soup.find('span', class_='author')
-        if not author_tag:
-            author_link = article_soup.find('a', href=re.compile(r'/autors_b\.php\?id='))
-            if author_link:
-                author_tag = author_link.find('span', itemprop='name') or author_link
-
+        if not title:
+            meta_title = article_soup.find('meta', property='og:title')
+            if meta_title and meta_title.get('content'):
+                title = meta_title['content']
+                title = re.sub(r'\s*[-|].*$', '', title).strip()
+                
+        self.article.title = title if title else "Без заголовка"
+        
+        author = None
+        author_tag = article_soup.find('div', class_='userinfo-title-blk')
         if author_tag:
-            self.article.author = [author_tag.get_text(strip=True)]
-        else:
-            self.article.author = ["NOT FOUND"]
-
+            author_link = author_tag.find('a')
+            if author_link:
+                author = author_link.get_text(strip=True)
+                
+        if not author:
+            author_meta = article_soup.find('meta', property='og:title')
+            if author_meta and author_meta.get('content'):
+                content = author_meta['content']
+                match = re.search(r'[-–]\s*([^|]+)', content)
+                if match:
+                    author = match.group(1).strip()
+                    
+        self.article.author = [author] if author else ["NOT FOUND"]
+        
         date_text = None
-        date_div = article_soup.find('div', class_='date')
-        if date_div:
-            date_text = date_div.get_text(strip=True)
-
-        if not date_text:
-            date_span = article_soup.find('span', itemprop='datePublished')
-            if date_span:
-                date_text = date_span.get_text(strip=True)
-
-        if not date_text:
-            for cell in article_soup.find_all('td'):
-                if 'Дата:' in cell.get_text() or 'Дата добавления' in cell.get_text():
-                    date_text = cell.get_text().replace('Дата:', '').replace('Дата добавления', '').strip()
+        other_pub_table = article_soup.find('table', class_='table')
+        if other_pub_table:
+            for row in other_pub_table.find_all('tr'):
+                cells = row.find_all('td')
+                if len(cells) >= 2:
+                    date_text = cells[1].get_text(strip=True)
                     break
-
+                
         if date_text:
             self.article.date = self.unify_date_format(date_text)
-            print(f"Article {self.article_id}: found date '{date_text}' -> {self.article.date}")
         else:
             self.article.date = datetime.datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
-            print(f"Article {self.article_id}: date not found, using today")
-
+            
         topics = []
-        topic_tags = article_soup.find_all('a', class_='topic') or article_soup.find_all('div', class_='category')
-        for tag in topic_tags:
-            topic_text = tag.get_text(strip=True)
-            if topic_text and topic_text not in topics:
-                topics.append(topic_text)
+        breadcrumb = article_soup.find('ol', class_='breadcrumb')
+        if breadcrumb:
+            for link in breadcrumb.find_all('a'):
+                topic_text = link.get_text(strip=True)
+                if topic_text and topic_text not in topics:
+                    topics.append(topic_text)
+
+        if not topics:
+            keywords_meta = article_soup.find('meta', attrs={'name': 'keywords'})
+            if keywords_meta and keywords_meta.get('content'):
+                keywords = keywords_meta['content'].split(',')
+                topics = [k.strip() for k in keywords if k.strip()]
+
+        if not topics:
+            tags_div = article_soup.find('div', class_='tags')
+            if tags_div:
+                for tag_link in tags_div.find_all('a'):
+                    topic_text = tag_link.get_text(strip=True)
+                    if topic_text:
+                        topics.append(topic_text)
+                        
         self.article.topics = topics
 
     def unify_date_format(self, date_str: str) -> datetime.datetime:
@@ -511,7 +546,6 @@ class HTMLParser:
             day, month, year = int(match.group(1)), int(match.group(2)), int(match.group(3))
             return datetime.datetime(year, month, day, 0, 0, 0)
 
-        print(f"Warning: Could not parse date string: '{date_str}'")
         return datetime.datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
 
 
@@ -554,7 +588,7 @@ def main() -> None:
     config = Config(CRAWLER_CONFIG_PATH)
     prepare_environment(ASSETS_PATH)
 
-    crawler = CrawlerRecursive(config)
+    crawler = Crawler(config)
     crawler.find_articles()
 
     print(f"Found {len(crawler.urls)} article URLs")

@@ -285,6 +285,7 @@ class Crawler:
         """
         self.config = config
         self.urls = []
+        self.titles = []
 
     def _extract_url(self, article_bs: Tag) -> str:
         """
@@ -336,6 +337,14 @@ class Crawler:
                 if article_url and article_url not in self.urls:
                     self.urls.append(article_url)
 
+                    title = ""
+                    h4_tag = link.find('h4')
+                    if h4_tag:
+                        title = str(h4_tag.get_text(strip=True))
+                        title = html.unescape(title)
+                    self.titles.append(title)
+                    print(f"Found {len(self.urls)}: '{title}' - {article_url}")
+
 
     def get_search_urls(self) -> list:
         """
@@ -381,7 +390,7 @@ class HTMLParser:
     HTMLParser implementation.
     """
 
-    def __init__(self, full_url: str, article_id: int, config: Config) -> None:
+    def __init__(self, full_url: str, article_id: int, title: str, config: Config) -> None:
         """
         Initialize an instance of the HTMLParser class.
 
@@ -393,6 +402,7 @@ class HTMLParser:
         self.full_url = full_url
         self.article_id = article_id
         self.config = config
+        self.crawler_title = title
         self.article = Article(url=full_url, article_id=article_id)
 
     def _fill_article_with_text(self, article_soup: BeautifulSoup) -> None:
@@ -448,7 +458,8 @@ class HTMLParser:
         Args:
             article_soup (bs4.BeautifulSoup): BeautifulSoup instance
         """
-        self._extract_title(article_soup)
+        self.article.title = self.crawler_title
+        print(f"Title from crawler: '{self.article.title}'")
         self._extract_author(article_soup)
         self._extract_date(article_soup)
         self._extract_topics(article_soup)
@@ -644,15 +655,15 @@ def main() -> None:
     print(f"Found {len(crawler.urls)} article URLs")
 
     saved_count = 0
-    for idx, url in enumerate(crawler.urls[:config.get_num_articles()], 1):
-        parser = HTMLParser(full_url=url, article_id=idx, config=config)
+    for idx, (url, title) in enumerate(zip(crawler.urls, crawler.titles), 1):
+        parser = HTMLParser(full_url=url, article_id=idx, title=title, config=config)
         article = parser.parse()
 
         if isinstance(article, Article) and len(article.text) > 50:
             to_raw(article)
             to_meta(article)
             saved_count += 1
-            print(f"Saved article {idx}: {url}")
+            print(f"Saved article {idx}: {title} - {url}")
         else:
             print(f"Skipped article {idx} (text too short)")
 

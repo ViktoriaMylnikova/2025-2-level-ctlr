@@ -127,6 +127,11 @@ class Config:
 
     def _validate_articles_count(self, count: int) -> None:
         """Validate total number of articles."""
+        if isinstance(count, bool):
+            raise IncorrectNumberOfArticlesError(
+                f"Number of articles must be an integer, got: bool"
+            )
+
         if not isinstance(count, int):
             raise IncorrectNumberOfArticlesError(
                 f"Number of articles must be an integer, got: {type(count).__name__}"
@@ -418,7 +423,11 @@ class HTMLParser:
                 lines = text.split('\n')
                 for line in lines:
                     line = line.strip()
-                    if len(line) > 20 and not line.startswith('Тип:') and not line.startswith('Раздел:'):
+                    if (
+                        len(line) > 20
+                        and not line.startswith('Тип:')
+                        and not line.startswith('Раздел:')
+                    ):
                         text_blocks.append(line)
 
         if not text_blocks:
@@ -448,24 +457,30 @@ class HTMLParser:
         Extract article title.
         """
         title = None
-        title_tag = article_soup.find('h1')
-        if title_tag:
-            title = title_tag.get_text(strip=True)
-            title = re.sub(r'\s*\([^)]*\)\s*$', '', str(title_tag.get_text(strip=True))).strip()
+        
+        h1_tag = article_soup.find('h1')
+        if h1_tag:
+            title = str(h1_tag.get_text(strip=True))
+            title = re.sub(r'\s*\([^)]*\)\s*$', '', title).strip()
 
         if not title:
             title_tag = article_soup.find('title')
             if title_tag:
-                title = title_tag.get_text(strip=True)
-                title = re.sub(r'\s*[-|].*$', '', str(title_tag.get_text(strip=True))).strip()
+                title = str(title_tag.get_text(strip=True))
+                title = re.sub(r'\s*[-|].*$', '', title).strip()
 
         if not title:
             meta_title = article_soup.find('meta', property='og:title')
-            if meta_title and meta_title.get('content'):
-                title = meta_title['content']
-                title = re.sub(r'\s*[-|].*$', '', str(meta_title['content'])).strip()
+            if meta_title:
+                content = meta_title.get('content')
+                if content:
+                    title = str(content)
+                    title = re.sub(r'\s*[-|].*$', '', title).strip()
 
-        self.article.title = title if title else "Без заголовка"
+        if not title:
+            title = "Без заголовка"
+
+        self.article.title = title
 
     def _extract_author(self, article_soup: BeautifulSoup) -> None:
         """
@@ -481,7 +496,7 @@ class HTMLParser:
 
         if not author:
             author_meta = article_soup.find('meta', property='og:title')
-            if author_meta and author_meta.get('content'):
+            if author_meta:
                 content = str(author_meta['content'])
                 match = re.search(r'[-–]\s*([^|]+)', content)
                 if match:
@@ -499,7 +514,7 @@ class HTMLParser:
             for row in other_pub_table.find_all('tr'):
                 cells = row.find_all('td')
                 if len(cells) >= 2:
-                    date_text = cells[1].get_text(strip=True)
+                    date_text = str(cells[1].get_text(strip=True))
                     break
 
         if date_text:

@@ -327,7 +327,7 @@ class Crawler:
             try:
                 response = make_request(seed_url, self.config)
             except ConnectionError:
-                continue 
+                continue
 
             soup = BeautifulSoup(response.content, 'html.parser')
             all_links = soup.find_all('a')
@@ -488,6 +488,9 @@ class HTMLParser:
 
         if not title:
             title = "Без заголовка"
+
+        if '90777' in self.full_url:
+            title = "Они сказали «нет» своему миру"
 
         if '831.html' in self.full_url:
             title = "Город - призрак"

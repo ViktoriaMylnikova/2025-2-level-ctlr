@@ -14,6 +14,17 @@ from core_utils.article.article import Article
 from core_utils.pipeline import LibraryWrapper, PipelineProtocol, TreeNode
 
 
+class EmptyDirectoryError(Exception):
+    """
+    Exception raised when directory is empty.
+    """
+
+class InconsistentDatasetError(Exception):
+    """
+    Exception raised when dataset has inconsistencies.
+    """
+
+
 class CorpusManager:
     """
     Work with articles and store them.
@@ -26,6 +37,10 @@ class CorpusManager:
         Args:
             path_to_raw_txt_data (pathlib.Path): Path to raw txt data
         """
+        self.path_to_raw_txt_data = path_to_raw_txt_data
+        self._storage = {}
+        self._validate_dataset()
+        self._scan_dataset()
 
     def _validate_dataset(self) -> None:
         """
@@ -36,6 +51,17 @@ class CorpusManager:
         """
         Register each dataset entry.
         """
+        for file_path in self.path_to_raw_txt_data.iterdir():
+            if not file_path.is_file():
+                continue
+
+            file_name = file_path.name
+            if file_name.endswith('_raw.txt'):
+                try:
+                    article_id = int(file_name.split('_')[0])
+                    self._storage[article_id] = Article(url = None, article_id = article_id)
+                except ValueError:
+                    continue
 
     def get_articles(self) -> dict:
         """
@@ -44,6 +70,7 @@ class CorpusManager:
         Returns:
             dict: Storage params
         """
+        return self._storage
 
 
 class TextProcessingPipeline(PipelineProtocol):
@@ -61,11 +88,17 @@ class TextProcessingPipeline(PipelineProtocol):
             corpus_manager (CorpusManager): CorpusManager instance
             analyzer (LibraryWrapper | None, optional): Analyzer instance. Defaults to None.
         """
+        self._corpus = corpus_manager
+        self._analyzer = analyzer
 
     def run(self) -> None:
         """
         Perform basic preprocessing and write processed text to files.
         """
+        import re
+        cleaned = re.sub(r'[^\w\s-]', '', text)
+        cleaned = cleaned.lower()
+        return cleaned
 
 
 class UDPipeAnalyzer(LibraryWrapper):

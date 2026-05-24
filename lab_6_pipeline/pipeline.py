@@ -2,18 +2,28 @@
 Pipeline for CONLL-U formatting.
 """
 
-# pylint: disable=too-few-public-methods, unused-import, undefined-variable, too-many-nested-blocks
-import json
+# pylint: disable=too-few-public-methods, unused-import, undefined-variable, too-many-nested-blocks, duplicate-code
 import pathlib
 import re
-
-from networkx import DiGraph
-from spacy import Language
-from spacy.tokens import Doc
 
 from core_utils.article.article import Article
 from core_utils.article.io import from_raw, to_cleaned, to_meta
 from core_utils.pipeline import LibraryWrapper, PipelineProtocol, TreeNode
+
+try:
+    from networkx import DiGraph
+    from networkx.algorithms.isomorphism import DiGraphMatcher
+except ImportError:
+    DiGraph = None  # type: ignore
+    print("No libraries installed. Failed to import.")
+
+try:
+    from spacy.language import Language
+    from spacy.tokens import Doc
+except ImportError:
+    Language = None  # type: ignore
+    Doc = None  # type: ignore
+    print("No libraries installed. Failed to import.")
 
 
 class EmptyDirectoryError(Exception):
@@ -433,10 +443,10 @@ def main() -> None:
     corpus_manager = CorpusManager(ASSETS_PATH)
 
     udpipe_analyzer = UDPipeAnalyzer()
-    text_pipeline = TextProcessingPipeline(corpus_manager, analyzer=udpipe_analyzer)
+    text_pipeline = TextProcessingPipeline(corpus_manager, analyzer = udpipe_analyzer)
     text_pipeline.run()
 
-    pos_pipeline = POSFrequencyPipeline(corpus_manager, analyzer=udpipe_analyzer)
+    pos_pipeline = POSFrequencyPipeline(corpus_manager, analyzer = udpipe_analyzer)
     pos_pipeline.run()
 
     print("Pipeline processing completed successfully")

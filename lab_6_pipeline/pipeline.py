@@ -9,6 +9,7 @@ import re
 from core_utils.article.article import Article
 from core_utils.article.io import from_raw, to_cleaned, to_meta
 from core_utils.pipeline import LibraryWrapper, PipelineProtocol, TreeNode
+from core_utils.constants import ASSETS_PATH
 
 try:
     from networkx import DiGraph
@@ -122,24 +123,17 @@ class CorpusManager:
         for file_path in self.path_to_raw_txt_data.iterdir():
             if not file_path.is_file():
                 continue
-            
-            file_name = file_path.name
-            if file_name.endswith('_raw.txt'):
-                try:
-                    article_id = int(file_name.split('_')[0])
-                    self._storage[article_id] = Article(url=None, article_id=article_id)
-                except ValueError:
-                    continue
-
-        for file_path in self.path_to_raw_txt_data.iterdir():
-            if not file_path.is_file():
-                continue
 
             file_name = file_path.name
             if file_name.endswith('_raw.txt'):
                 try:
                     article_id = int(file_name.split('_')[0])
-                    self._storage[article_id] = from_raw(file_path, self._storage[article_id])
+                    article = Article(url=None, article_id=article_id)
+
+                    with open(file_path, 'r', encoding='utf-8') as f:
+                        article.text = f.read().rstrip('\n')
+                        
+                    self._storage[article_id] = article
                 except ValueError:
                     continue
 
@@ -182,11 +176,9 @@ class TextProcessingPipeline(PipelineProtocol):
 
             if self._analyzer is not None:
                 raw_text = article.text
-                sentences = [s.strip() for s in re.split(r'[.!?]+', raw_text) if s.strip()]
-                if sentences:
-                    conllu_results = self._analyzer.analyze(sentences)
-                    full_conllu = '\n'.join(conllu_results)
-                    article.set_conllu_info(full_conllu)
+                conllu_results = self._analyzer.analyze([raw_text])
+                if conllu_results:
+                    article.set_conllu_info(conllu_results[0])
                     self._analyzer.to_conllu(article)
 
 
@@ -211,18 +203,41 @@ class UDPipeAnalyzer(LibraryWrapper):
         Returns:
             Language: Analyzer instance
         """
-        import ssl
-        import certifi
-
-        ssl_context = ssl.create_default_context(cafile=certifi.where())
-
+        from core_utils.constants import PROJECT_ROOT
         import spacy_udpipe
         from spacy_conll import ConllFormatter
 
-        spacy_udpipe.download("ru")
-        nlp = spacy_udpipe.load("ru")
+        model_path = PROJECT_ROOT / "lab_6_pipeline" / "assets" / "model"
+        model_name = "russian-syntagrus-ud-2.0-170801.udpipe"
+        model_full_path = model_path / model_name
 
-        nlp.add_pipe("conll_formatter", last=True, config={"conllu": True, "is_ud": True})
+        if not model_full_path.exists():
+            raise FileNotFoundError(f"Model not found: {model_full_path}")
+
+        nlp = spacy_udpipe.load_from_path(
+            lang="ru",
+            path=str(model_full_path)
+        )
+
+        nlp.add_pipe(
+            "conll_formatter",
+            last=True,
+            config={
+                "include_headers": True,
+                "field_names": {
+                    "ID": "ID",
+                    "FORM": "FORM",
+                    "LEMMA": "LEMMA",
+                    "UPOS": "UPOS",
+                    "XPOS": "XPOS",
+                    "FEATS": "FEATS",
+                    "HEAD": "HEAD",
+                    "DEPREL": "DEPREL",
+                    "DEPS": "DEPS",
+                    "MISC": "MISC",
+                },
+            },
+        )
 
         return nlp
 
@@ -239,10 +254,36 @@ class UDPipeAnalyzer(LibraryWrapper):
         results = []
         for text in texts:
             doc = self._analyzer(text)
-            if doc._.has_extension('conll'):
-                results.append(doc._.conll)
-            else:
-                results.append("")
+            conllu_parts = []
+
+            for sent_idx, sent in enumerate(doc.sents, start=1):
+                conllu_parts.append(f"# sent_id = {sent_idx}")
+                conllu_parts.append(f"# text = {sent.text}")
+
+                for token in sent:
+                    token_id = token.i - sent.start + 1
+                    word = token.text
+                    lemma = token.lemma_ if token.lemma_ else "_"
+                    upos = token.pos_
+                    xpos = "_"
+                    feats = str(token.morph).replace(" ", "|") if token.morph and str(token.morph) else "_"
+
+                    if token.head == token:
+                        head = 0
+                        deprel = "root"
+                    else:
+                        head = token.head.i - sent.start + 1
+                        deprel = token.dep_.lower() if token.dep_ else "_"
+
+                    deps = "_"
+                    misc = "_"
+
+                    conllu_parts.append(
+                        f"{token_id}\t{word}\t{lemma}\t{upos}\t{xpos}\t"
+                        f"{feats}\t{head}\t{deprel}\t{deps}\t{misc}"
+                    )
+
+            results.append("\n".join(conllu_parts))
         return results
 
 
@@ -253,11 +294,13 @@ class UDPipeAnalyzer(LibraryWrapper):
         Args:
             article (Article): Article containing information to save
         """
+        from core_utils.article.article import ArtifactType
+
         conllu_info = article.get_conllu_info()
         if conllu_info:
-            file_path = article.get_file_path()
-            conllu_path = file_path.parent / f"{article.get_article_id()}_udpipe.conllu"
-            with open(conllu_path, 'w', encoding='utf-8') as f:
+            conllu_info = conllu_info.strip()
+            file_path = article.get_file_path(ArtifactType.UDPIPE_CONLLU)
+            with open(file_path, 'w', encoding='utf-8') as f:
                 f.write(conllu_info)
 
     def from_conllu(self, article: Article) -> Doc:
@@ -270,22 +313,15 @@ class UDPipeAnalyzer(LibraryWrapper):
         Returns:
             Doc: Document ready for parsing
         """
-        from spacy_conll import parse_conll
+        from core_utils.article.article import ArtifactType
+        from spacy_conll.parser import ConllParser
 
-        file_path = article.get_file_path()
-        conllu_path = file_path.parent / f"{article.get_article_id()}_udpipe.conllu"
+        article_path = article.get_file_path(ArtifactType.UDPIPE_CONLLU)
+        if article_path.stat().st_size == 0:
+            raise EmptyFileError(f"{article.article_id} conllu is empty")
 
-        if not conllu_path.exists():
-            raise FileNotFoundError(f"ConLLU file not found: {conllu_path}")
-
-        if conllu_path.stat().st_size == 0:
-            raise EmptyFileError(f"ConLLU file is empty: {conllu_path}")
-
-        with open(conllu_path, 'r', encoding='utf-8') as f:
-            conllu_content = f.read()
-
-        doc = parse_conll(conllu_content)
-        return doc
+        parser = ConllParser(self._analyzer)
+        return parser.parse_conll_file_as_spacy(article_path, input_encoding="utf-8")
 
 
 class POSFrequencyPipeline:
@@ -327,17 +363,19 @@ class POSFrequencyPipeline:
         """
         Visualize the frequencies of each part of speech.
         """
+        from core_utils.article.article import ArtifactType
         from core_utils.visualizer import visualize
+        from core_utils.article.io import to_meta
 
         articles = self._corpus.get_articles()
 
         for article_id, article in articles.items():
             pos_frequencies = self._count_frequencies(article)
-
+    
             article.set_pos_info(pos_frequencies)
             to_meta(article)
 
-            image_path = article.get_file_path().parent / f"{article_id}_image.png"
+            image_path = ASSETS_PATH / f"{article_id}_image.png"
             visualize(article=article, path_to_save=image_path)
 
 

@@ -131,7 +131,7 @@ class CorpusManager:
             if file_name.endswith('_raw.txt'):
                 try:
                     article_id = int(file_name.split('_')[0])
-                    article = Article(url=None, article_id=article_id)
+                    article = Article(url=None, article_id = article_id)
 
                     with open(file_path, 'r', encoding='utf-8') as f:
                         article.text = f.read().rstrip('\n')

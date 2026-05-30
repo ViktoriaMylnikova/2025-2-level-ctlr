@@ -4,6 +4,7 @@ Pipeline for CONLL-U formatting.
 
 # pylint: disable=too-few-public-methods, unused-import, undefined-variable, too-many-nested-blocks, duplicate-code
 import pathlib
+import re
 
 import spacy_udpipe
 from spacy_conll.parser import ConllParser
@@ -71,7 +72,10 @@ class CorpusManager:
             raise FileNotFoundError(f"Path does not exist: {self.path_to_raw_txt_data}")
 
         if not self.path_to_raw_txt_data.is_dir():
-            raise NotADirectoryError(f"Path does not lead to a directory: {self.path_to_raw_txt_data}")
+            raise NotADirectoryError(
+                f"Path does not lead to a directory: "
+                f"{self.path_to_raw_txt_data}"
+            )
 
         raw_files = {}
         meta_files = {}
@@ -95,7 +99,10 @@ class CorpusManager:
                     continue
 
         if not raw_files:
-            raise EmptyDirectoryError(f"No valid _raw.txt files found in {self.path_to_raw_txt_data}")
+            raise EmptyDirectoryError(
+                f"No valid _raw.txt files found in "
+                f"{self.path_to_raw_txt_data}"
+            )
 
         if set(raw_files.keys()) != set(meta_files.keys()):
             raise InconsistentDatasetError(
@@ -135,7 +142,7 @@ class CorpusManager:
 
                     with open(file_path, 'r', encoding='utf-8') as f:
                         article.text = f.read().rstrip('\n')
-                        
+
                     self._storage[article_id] = article
                 except ValueError:
                     continue
@@ -316,15 +323,11 @@ class POSFrequencyPipeline:
         """
         Visualize the frequencies of each part of speech.
         """
-        from core_utils.article.article import ArtifactType
-        from core_utils.visualizer import visualize
-        from core_utils.article.io import to_meta
-
         articles = self._corpus.get_articles()
 
         for article_id, article in articles.items():
             pos_frequencies = self._count_frequencies(article)
-    
+
             article.set_pos_info(pos_frequencies)
             to_meta(article)
 
@@ -394,8 +397,6 @@ def main() -> None:
     """
     Entrypoint for pipeline module.
     """
-    from core_utils.constants import ASSETS_PATH
-
     corpus_manager = CorpusManager(ASSETS_PATH)
 
     udpipe_analyzer = UDPipeAnalyzer()

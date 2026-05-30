@@ -3,6 +3,6 @@ lxml==6.0.4
 matplotlib==3.10.9
 networkx==3.6.1
 requests==2.33.1
-spacy==3.8.14
 spacy-conll==4.0.1
 spacy-udpipe==1.0.0
+spacy==3.8.14

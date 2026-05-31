@@ -10,7 +10,7 @@ import spacy_udpipe
 from spacy_conll.parser import ConllParser
 
 from core_utils.article.article import Article, ArtifactType
-from core_utils.article.io import from_meta, from_raw, to_cleaned, to_meta
+from core_utils.article.io import from_raw, to_cleaned, to_meta
 from core_utils.constants import ASSETS_PATH, PROJECT_ROOT
 from core_utils.pipeline import LibraryWrapper, PipelineProtocol, TreeNode
 from core_utils.visualizer import visualize
@@ -100,18 +100,16 @@ class CorpusManager:
 
             file_name = file_path.name
             if file_name.endswith('_raw.txt'):
-                try:
-                    article_id = int(file_name.split('_')[0])
+                parts = file_name.split('_')
+                if len(parts) > 0 and parts[0].isdigit():
+                    article_id = int(parts[0])
                     raw_files[article_id] = file_path
-                except ValueError:
-                    continue
 
             elif file_name.endswith('_meta.json'):
-                try:
-                    article_id = int(file_name.split('_')[0])
+                parts = file_name.split('_')
+                if len(parts) > 0 and parts[0].isdigit():
+                    article_id = int(parts[0])
                     meta_files[article_id] = file_path
-                except ValueError:
-                    continue
 
         if not raw_files:
             raise EmptyDirectoryError(
@@ -153,16 +151,9 @@ class CorpusManager:
 
             file_name = file_path.name
             if file_name.endswith('_raw.txt'):
-                try:
-                    article_id = int(file_name.split('_')[0])
-                    article = Article(url=None, article_id = article_id)
-
-                    with open(file_path, 'r', encoding='utf-8') as f:
-                        article.text = f.read().rstrip('\n')
-
-                    self._storage[article_id] = article
-                except ValueError:
-                    continue
+                article_id = int(file_name.split('_')[0])
+                article = Article(url=None, article_id=article_id)
+                self._storage[article_id] = from_raw(file_path, article)
 
     def get_articles(self) -> dict:
         """
@@ -201,7 +192,7 @@ class TextProcessingPipeline(PipelineProtocol):
         for article in articles.values():
             to_cleaned(article)
 
-            if self._analyzer is not None:
+            if self._analyzer:
                 raw_text = article.text
                 conllu_results = self._analyzer.analyze([raw_text])
                 if conllu_results:

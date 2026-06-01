@@ -10,7 +10,7 @@ import spacy_udpipe
 from spacy_conll.parser import ConllParser
 
 from core_utils.article.article import Article, ArtifactType
-from core_utils.article.io import from_raw, to_cleaned, to_meta
+from core_utils.article.io import from_raw, from_meta, to_cleaned, to_meta
 from core_utils.constants import ASSETS_PATH, PROJECT_ROOT
 from core_utils.pipeline import LibraryWrapper, PipelineProtocol, TreeNode
 from core_utils.visualizer import visualize
@@ -149,11 +149,21 @@ class CorpusManager:
             if not file_path.is_file():
                 continue
 
-            file_name = file_path.name
-            if file_name.endswith('_raw.txt'):
-                article_id = int(file_name.split('_')[0])
+            if not file_path.name.endswith('_raw.txt'):
+                continue
+
+            article_id = int(file_path.name.split('_')[0])
+
+            meta_path = self.path_to_raw_txt_data / f"{article_id}_meta.json"
+            if meta_path.exists():
+                article = from_meta(meta_path)
+            else:
                 article = Article(url=None, article_id=article_id)
-                self._storage[article_id] = from_raw(file_path, article)
+
+            article = from_raw(file_path, article)
+
+            self._storage[article_id] = article
+
 
     def get_articles(self) -> dict:
         """
